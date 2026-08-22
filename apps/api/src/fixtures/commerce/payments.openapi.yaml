@@ -1,0 +1,35 @@
+openapi: 3.0.3
+info:
+  title: Payments Service
+  version: 3.2.1
+  x-service-id: payments-service
+  x-owner: Money Platform
+  x-domain: Payments
+paths:
+  /payments/authorize:
+    post:
+      operationId: authorizePayment
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentAuthorization'
+      responses:
+        '200':
+          description: Authorization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentResult'
+components:
+  schemas:
+    PaymentAuthorization:
+      type: object
+      properties:
+        orderId: { type: string }
+        amount: { type: number }
+    PaymentResult:
+      type: object
+      properties:
+        authorizationId: { type: string }
+        status: { type: string }

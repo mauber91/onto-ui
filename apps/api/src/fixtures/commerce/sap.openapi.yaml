@@ -1,0 +1,35 @@
+openapi: 3.0.3
+info:
+  title: SAP Adapter
+  version: 0.8.0
+  x-service-id: sap-adapter
+  x-owner: Enterprise Integrations
+  x-domain: Fulfillment
+paths:
+  /sap/purchase-orders:
+    post:
+      operationId: createSapPurchaseOrder
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PurchaseOrder'
+      responses:
+        '201':
+          description: SAP order
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PurchaseOrderReceipt'
+components:
+  schemas:
+    PurchaseOrder:
+      type: object
+      properties:
+        orderId: { type: string }
+        supplierId: { type: string }
+        lines: { type: array, items: { type: object } }
+    PurchaseOrderReceipt:
+      type: object
+      properties:
+        sapNumber: { type: string }

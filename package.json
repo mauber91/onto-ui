@@ -1,0 +1,18 @@
+{
+  "name": "onto-ui",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -k -n api,web -c cyan,magenta \"npm run dev -w @onto/api\" \"npm run dev -w @onto/web\"",
+    "build": "npm run build -w @onto/api && npm run build -w @onto/web",
+    "typecheck": "npm run typecheck -w @onto/domain && npm run typecheck -w @onto/extractor-sdk && npm run typecheck -w @onto/extractors-openapi && npm run typecheck -w @onto/api && npm run typecheck -w @onto/web",
+    "test": "npm run test -w @onto/domain && npm run test -w @onto/extractors-openapi && npm run test -w @onto/api",
+    "lint": "npm run lint -w @onto/web && npm run lint -w @onto/api"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

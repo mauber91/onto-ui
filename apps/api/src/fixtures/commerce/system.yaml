@@ -1,0 +1,68 @@
+services:
+  - id: checkout-service
+    name: Checkout Service
+    owner: Commerce Experience
+    domain: Commerce
+    description: Orchestrates the customer checkout journey.
+  - id: orders-service
+    name: Orders Service
+    owner: Commerce Platform
+    domain: Commerce
+    description: Owns order lifecycle and persistence.
+  - id: payments-service
+    name: Payments Service
+    owner: Money Platform
+    domain: Payments
+    description: Authorizes and captures payment.
+  - id: supplier-eligibility-service
+    name: Supplier Eligibility Service
+    owner: Supplier Platform
+    domain: Suppliers
+    description: Determines whether a supplier can fulfill an order.
+  - id: sap-adapter
+    name: SAP Adapter
+    owner: Enterprise Integrations
+    domain: Fulfillment
+    description: Translates purchase orders into SAP transactions.
+databases:
+  - id: orders-db
+    name: Orders DB
+    domain: Commerce
+  - id: supplier-eligibility-db
+    name: Supplier Eligibility DB
+    domain: Suppliers
+  - id: payments-db
+    name: Payments DB
+    domain: Payments
+events:
+  - id: order-created
+    name: OrderCreated
+    domain: Commerce
+  - id: payment-authorized
+    name: PaymentAuthorized
+    domain: Payments
+  - id: purchase-order-submitted
+    name: PurchaseOrderSubmitted
+    domain: Fulfillment
+domainEntities:
+  - id: purchase-order
+    name: PurchaseOrder
+    domain: Fulfillment
+  - id: supplier-eligibility
+    name: SupplierEligibility
+    domain: Suppliers
+  - id: order
+    name: Order
+    domain: Commerce
+relationships:
+  - { from: checkout-service, type: CALLS, to: orders-service, source: src/checkout/OrderClient.java:31 }
+  - { from: checkout-service, type: CALLS, to: payments-service, source: src/checkout/PaymentClient.java:44 }
+  - { from: orders-service, type: WRITES_TO, to: orders-db, source: src/orders/OrderRepository.java:87 }
+  - { from: orders-service, type: PUBLISHES, to: order-created, source: src/events/OrderPublisher.java:84 }
+  - { from: payments-service, type: WRITES_TO, to: payments-db, source: src/payments/PaymentRepository.java:54 }
+  - { from: payments-service, type: PUBLISHES, to: payment-authorized, source: src/events/PaymentPublisher.java:22 }
+  - { from: supplier-eligibility-service, type: READS_FROM, to: supplier-eligibility-db, source: src/suppliers/SupplierRepository.java:41 }
+  - { from: supplier-eligibility-service, type: OPERATES_ON, to: supplier-eligibility, source: src/suppliers/EligibilityService.java:66 }
+  - { from: sap-adapter, type: WRITES_TO, to: orders-db, source: src/sap/SapOrderRepository.java:28 }
+  - { from: sap-adapter, type: OPERATES_ON, to: purchase-order, source: src/sap/PurchaseOrderMapper.java:20 }
+  - { from: orders-service, type: CALLS, to: sap-adapter, source: src/orders/PurchaseOrderClient.java:105 }

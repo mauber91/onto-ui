@@ -1,0 +1,7 @@
+node_modules
+dist
+.vite
+coverage
+data
+.DS_Store
+*.local

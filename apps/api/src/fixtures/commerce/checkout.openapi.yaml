@@ -1,0 +1,37 @@
+openapi: 3.0.3
+info:
+  title: Checkout API
+  version: 2.0.0
+  x-service-id: checkout-service
+  x-owner: Commerce Experience
+  x-domain: Commerce
+paths:
+  /checkout:
+    post:
+      operationId: startCheckout
+      tags: [checkout]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckoutRequest'
+      responses:
+        '202':
+          description: Checkout accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckoutSession'
+components:
+  schemas:
+    CheckoutRequest:
+      type: object
+      required: [cartId, paymentMethod]
+      properties:
+        cartId: { type: string }
+        paymentMethod: { type: string }
+    CheckoutSession:
+      type: object
+      properties:
+        id: { type: string }
+        status: { type: string }

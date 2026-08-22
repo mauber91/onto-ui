@@ -1,0 +1,75 @@
+openapi: 3.0.3
+info:
+  title: Orders Service
+  version: 1.4.0
+  x-service-id: orders-service
+  x-owner: Commerce Platform
+  x-domain: Commerce
+paths:
+  /orders:
+    post:
+      operationId: createOrder
+      tags: [orders]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrder'
+      responses:
+        '201':
+          description: Order created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+    get:
+      operationId: listOrders
+      tags: [orders]
+      responses:
+        '200':
+          description: Orders
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderList'
+  /orders/{orderId}:
+    get:
+      operationId: getOrder
+      tags: [orders]
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Order
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+components:
+  schemas:
+    CreateOrder:
+      type: object
+      required: [supplierId, items]
+      properties:
+        supplierId: { type: string }
+        items: { type: array, items: { $ref: '#/components/schemas/OrderLine' } }
+    Order:
+      type: object
+      required: [id, status]
+      properties:
+        id: { type: string }
+        status: { type: string, enum: [draft, submitted, paid, shipped] }
+        supplierId: { type: string }
+    OrderLine:
+      type: object
+      properties:
+        sku: { type: string }
+        quantity: { type: integer }
+    OrderList:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Order' } }

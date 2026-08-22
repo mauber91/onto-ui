@@ -1,0 +1,31 @@
+openapi: 3.0.3
+info:
+  title: Supplier Eligibility Service
+  version: 1.1.0
+  x-service-id: supplier-eligibility-service
+  x-owner: Supplier Platform
+  x-domain: Suppliers
+paths:
+  /suppliers/{supplierId}/eligibility:
+    get:
+      operationId: getSupplierEligibility
+      parameters:
+        - name: supplierId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Eligibility
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupplierEligibility'
+components:
+  schemas:
+    SupplierEligibility:
+      type: object
+      properties:
+        supplierId: { type: string }
+        status: { type: string, enum: [eligible, review, blocked] }
+        reason: { type: string }
