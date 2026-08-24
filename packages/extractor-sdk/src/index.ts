@@ -1,6 +1,15 @@
-import type { Fact } from "@onto/domain";
+import type { Fact, SourceMetadata } from "@onto/domain";
 
-export type ArtifactKind = "openapi" | "system-manifest" | "source" | "documentation";
+export type ArtifactKind =
+  | "openapi"
+  | "system-manifest"
+  | "typescript-source"
+  | "frontend-config"
+  | "java-source"
+  | "bff-config"
+  | "test-evidence"
+  | "source"
+  | "documentation";
 
 export interface ArtifactInput {
   id: string;
@@ -9,6 +18,9 @@ export interface ArtifactInput {
   path: string;
   content: string;
   revision?: string;
+  repository?: string;
+  environment?: string;
+  source?: SourceMetadata;
 }
 
 export interface ExtractionContext {

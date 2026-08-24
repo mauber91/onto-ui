@@ -110,7 +110,7 @@ curl -X POST http://localhost:4000/api/v1/projects/commerce/ingestion-runs \
   }'
 ```
 
-For local evaluation, use the built-in Commerce & Sourcing fixture by posting an empty body or clicking **Re-run discovery** in the workspace.
+For local evaluation, use the built-in Commerce & Sourcing fixture or select the **Offer Sample Management** snapshot in the workspace. The latter is a sanitized deterministic fixture that traces frontend routes and API calls through the supplier-response BFF to application services and downstream operations.
 
 ### 4. Explore the resulting world model
 
@@ -131,7 +131,7 @@ The graph API is bounded by design. Queries support a focus entity, depth, relat
 | --- | --- | --- |
 | OpenAPI / REST contracts | Implemented | Services, endpoints, request/response schemas, owner/domain metadata |
 | System manifest | Implemented | Services, databases, events, domain concepts, cross-boundary relationships |
-| Application source code | Planned | Calls, controllers, repositories, database access, business concepts |
+| Application source code | Implemented first slice | TypeScript frontend routes/client calls and line-anchored Java/Spring BFF controller/service/client relationships |
 | Database schemas | Planned | Tables, ownership, read/write evidence, persistence concepts |
 | Kafka/event definitions | Planned | Topics, producers, consumers, event schemas |
 | Docker/Kubernetes/infrastructure | Planned | Deployment topology, environments, runtime boundaries |
@@ -184,7 +184,7 @@ curl 'http://localhost:4000/api/v1/projects/commerce/graph?mode=system&focus=Che
 
 ## Current boundaries
 
-This is the deterministic vertical slice, not yet the complete production platform. LLM semantic induction, proposal review, ontology editing, authentication, Java/Spring parsing, runtime traces, contradiction detection, continuous synchronization, and durable PostgreSQL storage are staged next. See [`docs/roadmap.md`](docs/roadmap.md) and [`docs/architecture.md`](docs/architecture.md).
+This is the deterministic vertical slice, not yet the complete production platform. LLM semantic induction, proposal review, ontology editing, authentication, runtime traces, contradiction detection, continuous synchronization, and durable PostgreSQL storage are staged next. The first Java/Spring parser is intentionally static and line-anchored; it does not execute source code. See [`docs/roadmap.md`](docs/roadmap.md) and [`docs/architecture.md`](docs/architecture.md).
 
 ## Repository map
 
@@ -195,6 +195,8 @@ packages/domain           Fact IR, ontology, graph, and layout contracts
 packages/extractor-sdk    Extensible extractor interface
 packages/extractors-openapi
                           OpenAPI and system-manifest extractors
-apps/api/src/fixtures     Commerce / sourcing sample system
+packages/extractors-source
+                          TypeScript frontend and Java/Spring BFF extractors
+apps/api/src/fixtures     Commerce / sourcing and sanitized Offer Sample Management fixtures
 docs                      Product, architecture, domain, API, and roadmap notes
 ```

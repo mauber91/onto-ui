@@ -1,0 +1,94 @@
+applications:
+  - id: offer-sample-management-frontend
+    name: Offer Sample Management
+    entityType: FrontendApplication
+    owner: Sourcing Experience
+    domain: Offer Sample Management
+    repository: enterprise-offer-ui
+    revision: fixture-2026-08-24
+    description: Scoped frontend remote for offer and sample workflows.
+services:
+  - id: supplier-response-bff
+    name: Supplier Response BFF
+    owner: Sourcing Platform
+    domain: Offer Sample Management
+    repository: gst-supplier-response-bff
+    revision: fixture-2026-08-24
+    description: Frontend-facing orchestration boundary.
+  - id: GST-SOURCING-SOURCING-SAMPLE-MANAGEMENT
+    name: GST Sourcing Sample Management
+    owner: Sourcing Platform
+    domain: Offer Sample Management
+    description: Sample requests, samples, assets, and tech-pack operations.
+  - id: ESP-QUOTE-ESP-QUOTE
+    name: ESP Quote
+    owner: Enterprise Product Services
+    domain: Offer Sample Management
+    description: Offer persistence and offer metadata.
+  - id: ESP-PLUM-UBER-API
+    name: ESP Plum Uber API
+    owner: Product Data Platform
+    domain: Offer Sample Management
+    description: Search, product, BOM, color, and measurement enrichment.
+configurations:
+  - id: offer-sample-management-routing-development
+    name: Frontend BFF routing · development
+    environment: development
+    key: supplierResponseBffBaseUrl
+    value: https://supplier-response-bff-dev.example.invalid
+  - id: offer-sample-management-routing-stage
+    name: Frontend BFF routing · stage
+    environment: stage
+    key: supplierResponseBffBaseUrl
+    value: /api/sample-management/v1/supplier-response-bff
+  - id: offer-sample-management-routing-production
+    name: Frontend BFF routing · production
+    environment: production
+    key: supplierResponseBffBaseUrl
+    value: /api/sample-management/v1/supplier-response-bff
+relationships:
+  - from: offer-sample-management-frontend
+    fromType: FrontendApplication
+    type: DEPLOYED_AS
+    to: offer-sample-management-routing-development
+    toType: Configuration
+    source: enterprise-offer-ui/apps/offer-sample-management/src/app/bootstrap/runtime/config.ts:12
+    environment: development
+  - from: offer-sample-management-frontend
+    fromType: FrontendApplication
+    type: DEPLOYED_AS
+    to: offer-sample-management-routing-stage
+    toType: Configuration
+    source: enterprise-offer-ui/apps/offer-sample-management/src/app/bootstrap/runtime/config.ts:16
+    environment: stage
+  - from: offer-sample-management-frontend
+    fromType: FrontendApplication
+    type: DEPLOYED_AS
+    to: offer-sample-management-routing-production
+    toType: Configuration
+    source: enterprise-offer-ui/apps/offer-sample-management/src/app/bootstrap/runtime/config.ts:20
+    environment: production
+  - from: offer-sample-management-frontend
+    fromType: FrontendApplication
+    type: CALLS
+    to: supplier-response-bff
+    toType: Service
+    source: enterprise-offer-ui/apps/offer-sample-management/src/services/sample-management-api/offers-api.ts:18
+  - from: supplier-response-bff
+    fromType: Service
+    type: CALLS
+    to: ESP-QUOTE-ESP-QUOTE
+    toType: Service
+    source: gst-supplier-response-bff/application-services/src/main/java/services/OffersServiceImpl.java:22
+  - from: supplier-response-bff
+    fromType: Service
+    type: CALLS
+    to: GST-SOURCING-SOURCING-SAMPLE-MANAGEMENT
+    toType: Service
+    source: gst-supplier-response-bff/application-services/src/main/java/services/SamplesServiceImpl.java:18
+  - from: supplier-response-bff
+    fromType: Service
+    type: CALLS
+    to: ESP-PLUM-UBER-API
+    toType: Service
+    source: gst-supplier-response-bff/application-services/src/main/java/services/SampleRequestsServiceImpl.java:28

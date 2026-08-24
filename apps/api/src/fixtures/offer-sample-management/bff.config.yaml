@@ -1,0 +1,21 @@
+environments:
+  development:
+    frontendRoutePrefix: /v1/supplier-response-bff
+    requestTimeoutMs: 2000
+  stage:
+    frontendRoutePrefix: /api/sample-management/v1/supplier-response-bff
+    requestTimeoutMs: 2000
+  production:
+    frontendRoutePrefix: /api/sample-management/v1/supplier-response-bff
+    requestTimeoutMs: 2000
+downstreamServices:
+  espQuote:
+    serviceId: ESP-QUOTE-ESP-QUOTE
+    timeoutMs: 2500
+    retryCount: 2
+  sampleManagement:
+    serviceId: GST-SOURCING-SOURCING-SAMPLE-MANAGEMENT
+    timeoutMs: 2500
+  uber:
+    serviceId: ESP-PLUM-UBER-API
+    timeoutMs: 1500

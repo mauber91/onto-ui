@@ -1,0 +1,120 @@
+openapi: 3.0.3
+info:
+  title: Supplier Response BFF
+  version: 4.2.0
+  x-service-id: supplier-response-bff
+  x-service-role: bff
+  x-owner: Sourcing Platform
+  x-domain: Offer Sample Management
+paths:
+  /v1/supplier-response-bff/offers:
+    get:
+      operationId: listOffers
+      tags: [offers]
+      responses:
+        '200':
+          description: Offers
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OfferListDTO' }
+    post:
+      operationId: createOffer
+      tags: [offers]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateOfferDTO' }
+      responses:
+        '201':
+          description: Created offer
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OfferDTO' }
+  /v1/supplier-response-bff/offers/{offerId}:
+    put:
+      operationId: updateOffer
+      tags: [offers]
+      parameters:
+        - { name: offerId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateOfferDTO' }
+      responses:
+        '200':
+          description: Updated offer
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OfferDTO' }
+  /v1/supplier-response-bff/offers/{offerId}/submit:
+    post:
+      operationId: submitOffer
+      tags: [offers]
+      parameters:
+        - { name: offerId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Submitted offer
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OfferDTO' }
+  /v1/supplier-response-bff/offers/{offerId}/clone:
+    post:
+      operationId: cloneOffer
+      tags: [offers]
+      parameters:
+        - { name: offerId, in: path, required: true, schema: { type: string } }
+      responses:
+        '201':
+          description: Cloned offer
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OfferDTO' }
+  /v1/supplier-response-bff/samples:
+    post:
+      operationId: createSample
+      tags: [samples]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateSampleDTO' }
+      responses:
+        '201':
+          description: Created sample
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SampleDTO' }
+  /v1/supplier-response-bff/samples/{sampleId}/submit:
+    post:
+      operationId: submitSample
+      tags: [samples]
+      parameters:
+        - { name: sampleId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Submitted sample
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SampleDTO' }
+  /v1/supplier-response-bff/sample-requests/{requestId}:
+    get:
+      operationId: getSampleRequest
+      tags: [sample-requests]
+      parameters:
+        - { name: requestId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Sample request with product enrichment
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SupplierSampleResponseDTO' }
+components:
+  schemas:
+    CreateOfferDTO: { type: object, properties: { supplierId: { type: string }, productId: { type: string } } }
+    UpdateOfferDTO: { type: object, properties: { price: { type: number }, status: { type: string } } }
+    OfferDTO: { type: object, properties: { id: { type: string }, status: { type: string } } }
+    OfferListDTO: { type: object, properties: { items: { type: array, items: { $ref: '#/components/schemas/OfferDTO' } } } }
+    CreateSampleDTO: { type: object, properties: { offerId: { type: string }, sampleType: { type: string } } }
+    SampleDTO: { type: object, properties: { id: { type: string }, status: { type: string } } }
+    SupplierSampleResponseDTO: { type: object, properties: { requestId: { type: string }, productName: { type: string }, measurements: { type: object } } }

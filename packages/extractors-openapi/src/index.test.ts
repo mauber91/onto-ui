@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { openApiExtractor } from "./index";
+import { openApiExtractor, systemManifestExtractor } from "./index";
 
 describe("OpenAPI extractor", () => {
   it("emits endpoint and schema facts with evidence", async () => {
@@ -8,5 +8,13 @@ describe("OpenAPI extractor", () => {
     expect(facts.some((fact) => fact.kind === "http_endpoint")).toBe(true);
     expect(facts.some((fact) => fact.predicate === "ACCEPTS_SCHEMA")).toBe(true);
     expect(facts.every((fact) => fact.evidence.length > 0)).toBe(true);
+  });
+
+  it("redacts secret-looking system manifest configuration", async () => {
+    const content = "configurations:\n  - id: client-secret\n    name: Client secret\n    key: clientSecret\n    value: do-not-store\n";
+    const artifact = { id: "manifest", projectId: "p", kind: "system-manifest" as const, path: "system.yaml", content };
+    const facts = await systemManifestExtractor.extract(artifact, { projectId: "p", artifact });
+    expect(JSON.stringify(facts)).not.toContain("do-not-store");
+    expect(JSON.stringify(facts)).toContain("[REDACTED]");
   });
 });

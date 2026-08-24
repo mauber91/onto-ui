@@ -1,5 +1,13 @@
 import { z } from "zod";
 
+export const SourceMetadata = z.object({
+  repository: z.string().optional(),
+  revision: z.string().optional(),
+  environment: z.string().optional(),
+  path: z.string().optional()
+});
+export type SourceMetadata = z.infer<typeof SourceMetadata>;
+
 export const EvidenceKind = z.enum([
   "deterministic",
   "documentation",
@@ -24,6 +32,9 @@ export const EvidenceRef = z.object({
   kind: EvidenceKind,
   label: z.string(),
   artifactId: z.string().optional(),
+  repository: z.string().optional(),
+  revision: z.string().optional(),
+  environment: z.string().optional(),
   location: SourceLocation.optional(),
   uri: z.string().optional(),
   excerpt: z.string().optional()
@@ -49,6 +60,7 @@ export const Fact = z.object({
   extractor: z.object({ id: z.string(), version: z.string() }),
   observedAt: z.string(),
   repositoryRevision: z.string().optional(),
+  source: SourceMetadata.optional(),
   confidence: z.number().min(0).max(1),
   metadata: z.record(z.unknown()).default({}),
   fingerprint: z.string()
@@ -107,7 +119,8 @@ export const GraphEntity = z.object({
   properties: z.record(z.unknown()).default({}),
   confidence: z.number().min(0).max(1),
   origin: AssertionOrigin,
-  evidenceIds: z.array(z.string()).default([])
+  evidenceIds: z.array(z.string()).default([]),
+  source: SourceMetadata.optional()
 });
 export type GraphEntity = z.infer<typeof GraphEntity>;
 
@@ -121,7 +134,8 @@ export const GraphRelationship = z.object({
   origin: AssertionOrigin,
   evidenceIds: z.array(z.string()).default([]),
   supportFactIds: z.array(z.string()).default([]),
-  description: z.string().optional()
+  description: z.string().optional(),
+  provenance: SourceMetadata.optional()
 });
 export type GraphRelationship = z.infer<typeof GraphRelationship>;
 
@@ -194,23 +208,42 @@ export const initialOntology = (projectId: string): OntologyDocument => ({
   entityTypes: [
     { id: "Domain", name: "Domain", description: "Business or technical boundary that groups related capabilities.", extends: [], aliases: ["BusinessDomain"], properties: {}, deprecated: false },
     { id: "Service", name: "Service", description: "Independently deployable software service.", extends: [], aliases: ["Microservice", "BackendService"], properties: {}, deprecated: false },
+    { id: "FrontendApplication", name: "Frontend application", description: "A browser application, remote, or independently deployed frontend boundary.", extends: [], aliases: ["WebApplication", "Frontend"], properties: {}, deprecated: false },
+    { id: "FrontendComponent", name: "Frontend component", description: "A frontend route component or composed UI boundary.", extends: [], aliases: ["ReactComponent"], properties: {}, deprecated: false },
+    { id: "FrontendRoute", name: "Frontend route", description: "A navigable frontend route associated with a screen or workflow.", extends: [], aliases: ["Route", "Screen"], properties: {}, deprecated: false },
+    { id: "Workflow", name: "Workflow", description: "A user-facing capability that crosses frontend and service boundaries.", extends: [], aliases: ["UserJourney", "UseCase"], properties: {}, deprecated: false },
+    { id: "FrontendApiCall", name: "Frontend API call", description: "A statically observed HTTP call made by frontend code.", extends: [], aliases: ["ClientCall"], properties: {}, deprecated: false },
     { id: "APIEndpoint", name: "API endpoint", description: "Network-accessible operation exposed by a service.", extends: [], aliases: ["Endpoint", "RESTEndpoint"], properties: {}, deprecated: false },
+    { id: "BffEndpoint", name: "BFF endpoint", description: "A frontend-facing endpoint exposed by a backend-for-frontend.", extends: ["APIEndpoint"], aliases: ["GatewayEndpoint"], properties: {}, deprecated: false },
+    { id: "ApplicationService", name: "Application service", description: "An application-layer orchestration service observed behind an endpoint.", extends: [], aliases: ["UseCaseService"], properties: {}, deprecated: false },
+    { id: "DownstreamOperation", name: "Downstream operation", description: "A client operation invoked by an application service.", extends: [], aliases: ["ClientOperation"], properties: {}, deprecated: false },
     { id: "Schema", name: "Data schema", description: "Structured contract used by an interface or persisted boundary.", extends: [], aliases: ["DTO", "Model"], properties: {}, deprecated: false },
     { id: "Event", name: "Event", description: "Domain or integration event exchanged asynchronously.", extends: [], aliases: ["Message"], properties: {}, deprecated: false },
     { id: "Database", name: "Database", description: "Persistent data store used by one or more services.", extends: [], aliases: ["DataStore"], properties: {}, deprecated: false },
-    { id: "DomainEntity", name: "Domain entity", description: "Business concept represented by the system.", extends: [], aliases: [], properties: {}, deprecated: false }
+    { id: "DomainEntity", name: "Domain entity", description: "Business concept represented by the system.", extends: [], aliases: [], properties: {}, deprecated: false },
+    { id: "Configuration", name: "Configuration", description: "A non-secret environment or routing configuration declaration.", extends: [], aliases: ["RuntimeConfig"], properties: {}, deprecated: false },
+    { id: "AuthPolicy", name: "Authorization policy", description: "An ownership or authorization check observed at a boundary.", extends: [], aliases: ["OwnershipPolicy"], properties: {}, deprecated: false }
   ],
   relations: [
-    { id: "CONTAINS", name: "contains", description: "Groups an entity within a domain.", from: ["Domain"], to: ["Service", "DomainEntity", "Database", "Event"], aliases: ["OWNS"], transitive: false, symmetric: false, deprecated: false },
-    { id: "EXPOSES", name: "exposes", description: "Makes an API endpoint available.", from: ["Service"], to: ["APIEndpoint"], aliases: ["SERVES"], transitive: false, symmetric: false, deprecated: false },
-    { id: "CALLS", name: "calls", description: "Invokes an endpoint or service.", from: ["Service", "APIEndpoint"], to: ["Service", "APIEndpoint"], aliases: ["INVOKES", "REQUESTS"], transitive: false, symmetric: false, deprecated: false },
-    { id: "ACCEPTS", name: "accepts", description: "Accepts a request schema.", from: ["APIEndpoint"], to: ["Schema"], aliases: ["REQUESTS_SCHEMA"], transitive: false, symmetric: false, deprecated: false },
-    { id: "RETURNS", name: "returns", description: "Returns a response schema.", from: ["APIEndpoint"], to: ["Schema"], aliases: ["RESPONDS_WITH"], transitive: false, symmetric: false, deprecated: false },
+    { id: "CONTAINS", name: "contains", description: "Groups an entity within a domain.", from: ["Domain"], to: ["Service", "FrontendApplication", "Workflow", "APIEndpoint", "BffEndpoint", "ApplicationService", "DownstreamOperation", "Configuration", "AuthPolicy", "DomainEntity", "Database", "Event"], aliases: ["OWNS"], transitive: false, symmetric: false, deprecated: false },
+    { id: "EXPOSES", name: "exposes", description: "Makes an API endpoint or frontend route available.", from: ["Service", "FrontendApplication"], to: ["APIEndpoint", "BffEndpoint", "FrontendRoute"], aliases: ["SERVES"], transitive: false, symmetric: false, deprecated: false },
+    { id: "ROUTES_TO", name: "routes to", description: "Associates a frontend route with its component or workflow.", from: ["FrontendApplication", "FrontendRoute"], to: ["FrontendComponent", "Workflow"], aliases: ["NAVIGATES_TO"], transitive: false, symmetric: false, deprecated: false },
+    { id: "PART_OF", name: "part of", description: "Associates an observed implementation detail with a workflow.", from: ["FrontendRoute", "FrontendApiCall", "BffEndpoint", "ApplicationService", "DownstreamOperation"], to: ["Workflow"], aliases: ["BELONGS_TO"], transitive: false, symmetric: false, deprecated: false },
+    { id: "CALLS", name: "calls", description: "Invokes an endpoint, operation, or service.", from: ["Service", "FrontendApplication", "FrontendApiCall", "APIEndpoint", "BffEndpoint", "ApplicationService"], to: ["Service", "APIEndpoint", "BffEndpoint", "DownstreamOperation"], aliases: ["INVOKES", "REQUESTS"], transitive: false, symmetric: false, deprecated: false },
+    { id: "HANDLED_BY", name: "handled by", description: "Connects a BFF endpoint to its application service.", from: ["BffEndpoint", "APIEndpoint"], to: ["ApplicationService"], aliases: ["DELEGATES_TO"], transitive: false, symmetric: false, deprecated: false },
+    { id: "RESOLVES_TO", name: "resolves to", description: "Connects a downstream operation to the service identity it reaches.", from: ["DownstreamOperation"], to: ["Service"], aliases: ["TARGETS"], transitive: false, symmetric: false, deprecated: false },
+    { id: "ACCEPTS", name: "accepts", description: "Accepts a request schema.", from: ["APIEndpoint", "BffEndpoint"], to: ["Schema"], aliases: ["REQUESTS_SCHEMA"], transitive: false, symmetric: false, deprecated: false },
+    { id: "RETURNS", name: "returns", description: "Returns a response schema.", from: ["APIEndpoint", "BffEndpoint"], to: ["Schema"], aliases: ["RESPONDS_WITH"], transitive: false, symmetric: false, deprecated: false },
+    { id: "TRANSFORMS", name: "transforms", description: "Maps or transforms one schema or DTO into another.", from: ["FrontendApiCall", "BffEndpoint", "ApplicationService", "DownstreamOperation", "Service"], to: ["Schema"], aliases: ["MAPS"], transitive: false, symmetric: false, deprecated: false },
+    { id: "ENRICHES", name: "enriches", description: "Adds data from another service or operation to a workflow response.", from: ["ApplicationService", "DownstreamOperation", "Service"], to: ["Service", "DownstreamOperation", "Schema"], aliases: [], transitive: false, symmetric: false, deprecated: false },
     { id: "READS_FROM", name: "reads from", description: "Reads data from a persistent store.", from: ["Service"], to: ["Database"], aliases: [], transitive: false, symmetric: false, deprecated: false },
     { id: "WRITES_TO", name: "writes to", description: "Writes data to a persistent store.", from: ["Service"], to: ["Database"], aliases: [], transitive: false, symmetric: false, deprecated: false },
     { id: "PUBLISHES", name: "publishes", description: "Publishes an event.", from: ["Service"], to: ["Event"], aliases: ["EMITS"], transitive: false, symmetric: false, deprecated: false },
     { id: "CONSUMES", name: "consumes", description: "Consumes an event.", from: ["Service"], to: ["Event"], aliases: ["SUBSCRIBES_TO"], transitive: false, symmetric: false, deprecated: false },
-    { id: "OPERATES_ON", name: "operates on", description: "Acts on a business concept.", from: ["Service", "APIEndpoint"], to: ["DomainEntity"], aliases: ["DETERMINES"], transitive: false, symmetric: false, deprecated: false }
+    { id: "OPERATES_ON", name: "operates on", description: "Acts on a business concept.", from: ["Service", "APIEndpoint", "BffEndpoint", "ApplicationService"], to: ["DomainEntity"], aliases: ["DETERMINES"], transitive: false, symmetric: false, deprecated: false },
+    { id: "USES_CONFIGURATION", name: "uses configuration", description: "Associates a source-observed component with non-secret configuration.", from: ["FrontendApplication", "FrontendApiCall", "Service", "BffEndpoint"], to: ["Configuration"], aliases: [], transitive: false, symmetric: false, deprecated: false },
+    { id: "AUTHORIZES", name: "authorizes", description: "Represents an ownership or authorization policy applied to a boundary.", from: ["AuthPolicy"], to: ["FrontendRoute", "BffEndpoint", "ApplicationService", "Service"], aliases: ["CHECKS_OWNERSHIP"], transitive: false, symmetric: false, deprecated: false },
+    { id: "DEPLOYED_AS", name: "deployed as", description: "Associates an application or service with a deployment/configuration identity.", from: ["FrontendApplication", "Service"], to: ["Configuration"], aliases: [], transitive: false, symmetric: false, deprecated: false }
   ]
 });
 

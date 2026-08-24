@@ -32,6 +32,13 @@ app.get<{ Params: { projectId: string }; Querystring: Record<string, string | un
       source: query.source,
       search: query.search,
       focus: query.focus,
+      repository: query.repository,
+      environment: query.environment,
+      workflow: query.workflow,
+      route: query.route,
+      endpoint: query.endpoint,
+      downstream: query.downstream,
+      origin: query.origin as any,
       depth: query.depth ? Number(query.depth) : undefined,
       limit: query.limit ? Number(query.limit) : undefined,
       confidence: query.confidence ? Number(query.confidence) : undefined
@@ -51,7 +58,14 @@ app.get<{ Params: { projectId: string } }>("/api/v1/projects/:projectId/runs", a
 
 const IngestionRequest = z.object({
   fixture: z.boolean().optional(),
-  artifacts: z.array(z.object({ path: z.string().min(1).max(500), content: z.string().min(1).max(2_000_000), kind: z.enum(["openapi", "system-manifest"]).default("openapi") })).max(20).optional()
+  artifacts: z.array(z.object({
+    path: z.string().min(1).max(500),
+    content: z.string().min(1).max(2_000_000),
+    kind: z.enum(["openapi", "system-manifest", "typescript-source", "frontend-config", "java-source", "bff-config", "test-evidence"]).default("openapi"),
+    repository: z.string().max(300).optional(),
+    revision: z.string().max(300).optional(),
+    environment: z.string().max(100).optional()
+  })).max(40).optional()
 });
 
 app.post<{ Params: { projectId: string } }>("/api/v1/projects/:projectId/ingestion-runs", async (request, reply) => {
@@ -60,15 +74,22 @@ app.post<{ Params: { projectId: string } }>("/api/v1/projects/:projectId/ingesti
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     let run;
     if (parsed.data.artifacts?.length) {
-      const artifacts: ArtifactInput[] = parsed.data.artifacts.map((artifact, index) => ({
-        id: `uploaded_${Date.now()}_${index}`,
-        projectId: request.params.projectId,
-        kind: artifact.kind,
-        path: artifact.path,
-        content: artifact.content,
-        revision: `upload-${Date.now()}`
-      }));
+      const uploadedArtifacts = parsed.data.artifacts as Array<Pick<ArtifactInput, "path" | "content" | "kind" | "repository" | "revision" | "environment">>;
+      const artifacts: ArtifactInput[] = uploadedArtifacts.map((artifact, index) => {
+        const revision = artifact.revision ?? `upload-${Date.now()}`;
+        return {
+          id: `uploaded_${Date.now()}_${index}`,
+          projectId: request.params.projectId,
+          kind: artifact.kind,
+          path: artifact.path,
+          content: artifact.content,
+          revision,
+          source: { repository: artifact.repository, revision, environment: artifact.environment, path: artifact.path }
+        };
+      });
       run = await store.ingest(request.params.projectId, artifacts);
+    } else if (request.params.projectId === "offer-sample-management") {
+      run = await store.ingestOfferSampleManagementFixture(request.params.projectId);
     } else {
       run = await store.ingestFixture(request.params.projectId);
     }

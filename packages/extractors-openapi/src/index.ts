@@ -1,12 +1,33 @@
 import { createHash } from "node:crypto";
-import { parse as parseYaml } from "yaml";
+import YAML from "yaml";
 import type { Fact } from "@onto/domain";
 import { stableId } from "@onto/domain";
 import type { ArtifactInput, Extractor, ExtractionContext } from "@onto/extractor-sdk";
 
 type AnyRecord = Record<string, any>;
 
+const parseYaml = (content: string): unknown => (YAML as { parse: (value: string) => unknown }).parse(content);
+
 const hash = (value: string) => createHash("sha1").update(value).digest("hex").slice(0, 12);
+const secretKey = /(secret|token|password|passwd|private[_-]?key|credential|authorization|vault|client[_-]?secret)/i;
+const redactText = (value: string): string => value
+  .replace(/(Bearer\s+)[A-Za-z0-9._~+/=-]+/gi, "$1[REDACTED]")
+  .replace(/((?:token|secret|password|private[_-]?key|authorization)\s*[:=]\s*["']?)[^,\s"'}]+/gi, "$1[REDACTED]");
+const redactValue = (key: string, value: unknown): unknown => {
+  if (secretKey.test(key)) return "[REDACTED]";
+  if (typeof value === "string") return redactText(value);
+  if (Array.isArray(value)) return value.map((item) => redactValue(key, item));
+  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([childKey, childValue]) => [childKey, redactValue(childKey, childValue)]));
+  return value;
+};
+const safeMetadata = (metadata: Record<string, unknown>): Record<string, unknown> => Object.fromEntries(Object.entries(metadata).map(([key, value]) => [key, redactValue(key, value)]));
+
+const sourceFor = (artifact: ArtifactInput) => ({
+  repository: artifact.source?.repository ?? artifact.repository,
+  revision: artifact.source?.revision ?? artifact.revision,
+  environment: artifact.source?.environment ?? artifact.environment,
+  path: artifact.source?.path ?? artifact.path
+});
 
 const makeFact = (
   context: ExtractionContext,
@@ -17,9 +38,12 @@ const makeFact = (
   line: number,
   label: string,
   confidence = 0.98,
-  metadata: Record<string, unknown> = {}
+  metadata: Record<string, unknown> = {},
+  evidenceKind: "deterministic" | "configuration" | "documentation" = "deterministic",
+  extractorId = "openapi"
 ): Fact => {
-  const fingerprint = hash(JSON.stringify([kind, subject, predicate, object, context.artifact.path, line]));
+  const source = sourceFor(context.artifact);
+  const fingerprint = hash(JSON.stringify([kind, subject, predicate, object, source.repository, source.path, line, source.environment]));
   const evidenceId = `evidence_${fingerprint}`;
   return {
     id: `fact_${fingerprint}`,
@@ -30,17 +54,21 @@ const makeFact = (
     object,
     evidence: [{
       id: evidenceId,
-      kind: "deterministic",
-      label,
+      kind: evidenceKind,
+      label: redactText(label),
       artifactId: context.artifact.id,
-      location: { file: context.artifact.path, line },
-      excerpt: label
+      repository: source.repository,
+      revision: source.revision,
+      environment: source.environment,
+      location: { file: source.path ?? context.artifact.path, line },
+      excerpt: redactText(label)
     }],
-    extractor: { id: "openapi", version: "0.1.0" },
+    extractor: { id: extractorId, version: "0.1.0" },
     observedAt: context.now ?? new Date().toISOString(),
-    repositoryRevision: context.artifact.revision,
+    repositoryRevision: source.revision,
+    source,
     confidence,
-    metadata,
+    metadata: safeMetadata(metadata),
     fingerprint
   };
 };
@@ -57,7 +85,7 @@ export class OpenApiExtractor implements Extractor {
   version = "0.1.0";
 
   supports(artifact: ArtifactInput): boolean {
-    return artifact.kind !== "system-manifest" && (artifact.kind === "openapi" || /\.(ya?ml|json)$/i.test(artifact.path));
+    return artifact.kind === "openapi" || (artifact.kind === "source" && /\.(ya?ml|json)$/i.test(artifact.path) && !/(^|\/)system\.ya?ml$/i.test(artifact.path));
   }
 
   async extract(artifact: ArtifactInput, context: ExtractionContext): Promise<Fact[]> {
@@ -68,11 +96,13 @@ export class OpenApiExtractor implements Extractor {
 
     const serviceId = String(document["x-service-id"] ?? document.info?.["x-service-id"] ?? document.info?.title ?? artifact.path.split("/").pop()?.split(".")[0] ?? "service");
     const serviceLabel = String(document.info?.title ?? serviceId);
+    const endpointType = document["x-service-role"] === "bff" ? "BffEndpoint" : "APIEndpoint";
+    const serviceType = document["x-entity-type"] === "FrontendApplication" ? "FrontendApplication" : "Service";
     const facts: Fact[] = [];
     facts.push(makeFact(
       context,
       "service_declared",
-      { kind: "entity", value: serviceId, label: serviceLabel, typeHint: "Service" },
+      { kind: "entity", value: serviceId, label: serviceLabel, typeHint: serviceType },
       "DECLARES_SERVICE",
       { kind: "literal", value: serviceLabel },
       lineFor(artifact.content, serviceLabel, 1),
@@ -94,13 +124,13 @@ export class OpenApiExtractor implements Extractor {
         facts.push(makeFact(
           context,
           "http_endpoint",
-          { kind: "entity", value: endpointId, label: endpointLabel, typeHint: "APIEndpoint" },
+          { kind: "entity", value: endpointId, label: endpointLabel, typeHint: endpointType },
           "EXPOSED_BY",
           { kind: "entity", value: serviceId, label: serviceLabel, typeHint: "Service" },
           lineFor(artifact.content, path, operationIndex),
           `${endpointLabel} is exposed by ${serviceLabel}`,
           0.99,
-          { method: method.toUpperCase(), path, operationId, tags: operation.tags ?? [] }
+          { method: method.toUpperCase(), path, operationId, tags: operation.tags ?? [], serviceRole: document["x-service-role"], declaredContract: true }
         ));
 
         const requestSchema = operation.requestBody?.content && Object.values(operation.requestBody.content as AnyRecord)[0] as AnyRecord | undefined;
@@ -110,7 +140,7 @@ export class OpenApiExtractor implements Extractor {
           facts.push(makeFact(
             context,
             "endpoint_request_schema",
-            { kind: "entity", value: endpointId, label: endpointLabel, typeHint: "APIEndpoint" },
+            { kind: "entity", value: endpointId, label: endpointLabel, typeHint: endpointType },
             "ACCEPTS_SCHEMA",
             { kind: "entity", value: `${serviceId}:${name}`, label: name, typeHint: "Schema" },
             lineFor(artifact.content, name, operationIndex),
@@ -127,7 +157,7 @@ export class OpenApiExtractor implements Extractor {
           facts.push(makeFact(
             context,
             "endpoint_response_schema",
-            { kind: "entity", value: endpointId, label: endpointLabel, typeHint: "APIEndpoint" },
+            { kind: "entity", value: endpointId, label: endpointLabel, typeHint: endpointType },
             "RETURNS_SCHEMA",
             { kind: "entity", value: `${serviceId}:${name}`, label: name, typeHint: "Schema" },
             lineFor(artifact.content, name, operationIndex),
@@ -167,35 +197,88 @@ export class SystemManifestExtractor implements Extractor {
   async extract(artifact: ArtifactInput, context: ExtractionContext): Promise<Fact[]> {
     const document = parseYaml(artifact.content) as AnyRecord;
     const facts: Fact[] = [];
-    const add = (kind: string, subject: string, subjectType: string, predicate: string, object: string, objectType: string, label: string, metadata: Record<string, unknown> = {}) => {
-      facts.push(makeFact(context, kind, { kind: "entity", value: subject, typeHint: subjectType }, predicate, { kind: "entity", value: object, typeHint: objectType }, 1, label, 0.93, metadata));
+    const entityKinds = new Map<string, string>();
+    const register = (id: string, type: string) => entityKinds.set(id, type);
+    const addDeclaration = (kind: string, id: string, type: string, name: string, metadata: Record<string, unknown>, confidence = 0.94) => {
+      register(id, type);
+      facts.push(makeFact(
+        context,
+        kind,
+        { kind: "entity", value: id, label: name, typeHint: type },
+        "HAS_METADATA",
+        { kind: "literal", value: name },
+        lineFor(artifact.content, id, 1),
+        `${name} metadata`,
+        confidence,
+        metadata,
+        "configuration",
+        "system-manifest"
+      ));
     };
+
+    for (const application of (document.applications ?? []) as AnyRecord[]) {
+      const id = String(application.id);
+      addDeclaration("application_metadata", id, String(application.entityType ?? "FrontendApplication"), String(application.name ?? id), {
+        owner: application.owner,
+        domain: application.domain,
+        description: application.description,
+        repository: application.repository,
+        revision: application.revision
+      }, 0.96);
+    }
     for (const service of (document.services ?? []) as AnyRecord[]) {
-      facts.push(makeFact(context, "service_metadata", { kind: "entity", value: String(service.id), label: String(service.name ?? service.id), typeHint: "Service" }, "HAS_METADATA", { kind: "literal", value: String(service.name ?? service.id) }, 1, `${service.name ?? service.id} metadata`, 0.94, { owner: service.owner, domain: service.domain, description: service.description }));
+      const id = String(service.id);
+      const type = String(service.entityType ?? (service.kind === "frontend" ? "FrontendApplication" : "Service"));
+      addDeclaration("service_metadata", id, type, String(service.name ?? id), {
+        owner: service.owner,
+        domain: service.domain,
+        description: service.description,
+        repository: service.repository,
+        revision: service.revision,
+        environment: service.environment
+      });
     }
     for (const database of (document.databases ?? []) as AnyRecord[]) {
-      facts.push(makeFact(context, "database_declared", { kind: "entity", value: String(database.id), label: String(database.name ?? database.id), typeHint: "Database" }, "DECLARES_DATABASE", { kind: "literal", value: String(database.name ?? database.id) }, 1, `${database.name ?? database.id} database`, 0.95, { domain: database.domain }));
+      const id = String(database.id);
+      addDeclaration("database_declared", id, "Database", String(database.name ?? id), { domain: database.domain }, 0.95);
     }
     for (const event of (document.events ?? []) as AnyRecord[]) {
-      facts.push(makeFact(context, "event_declared", { kind: "entity", value: String(event.id), label: String(event.name ?? event.id), typeHint: "Event" }, "DECLARES_EVENT", { kind: "literal", value: String(event.name ?? event.id) }, 1, `${event.name ?? event.id} event`, 0.95, { domain: event.domain }));
+      const id = String(event.id);
+      addDeclaration("event_declared", id, "Event", String(event.name ?? id), { domain: event.domain }, 0.95);
     }
     for (const entity of (document.domainEntities ?? []) as AnyRecord[]) {
-      facts.push(makeFact(context, "domain_entity_declared", { kind: "entity", value: String(entity.id), label: String(entity.name ?? entity.id), typeHint: "DomainEntity" }, "DECLARES_DOMAIN_ENTITY", { kind: "literal", value: String(entity.name ?? entity.id) }, 1, `${entity.name ?? entity.id} domain entity`, 0.9, { domain: entity.domain }));
+      const id = String(entity.id);
+      addDeclaration("domain_entity_declared", id, "DomainEntity", String(entity.name ?? id), { domain: entity.domain }, 0.9);
     }
+    for (const configuration of (document.configurations ?? []) as AnyRecord[]) {
+      const id = String(configuration.id);
+      const configurationKey = String(configuration.key ?? configuration.name ?? id);
+      addDeclaration("configuration_declared", id, "Configuration", String(configuration.name ?? id), {
+        environment: configuration.environment,
+        key: configurationKey,
+        value: secretKey.test(configurationKey) ? "[REDACTED]" : redactValue(configurationKey, configuration.value)
+      }, 0.92);
+    }
+
     for (const relation of (document.relationships ?? []) as AnyRecord[]) {
       const from = String(relation.from);
       const to = String(relation.to);
       const type = String(relation.type);
-      const typeMap: Record<string, [string, string]> = {
-        CALLS: ["Service", "Service"],
-        READS_FROM: ["Service", "Database"],
-        WRITES_TO: ["Service", "Database"],
-        PUBLISHES: ["Service", "Event"],
-        CONSUMES: ["Service", "Event"],
-        OPERATES_ON: ["Service", "DomainEntity"]
-      };
-      const [fromType, toType] = typeMap[type] ?? ["Service", "Service"];
-      add("relationship_observed", from, fromType, type, to, toType, `${from} ${type} ${to}`, { source: relation.source, domain: relation.domain });
+      const fromType = String(relation.fromType ?? entityKinds.get(from) ?? "Service");
+      const toType = String(relation.toType ?? entityKinds.get(to) ?? "Service");
+      facts.push(makeFact(
+        context,
+        "relationship_observed",
+        { kind: "entity", value: from, typeHint: fromType },
+        type,
+        { kind: "entity", value: to, typeHint: toType },
+        lineFor(artifact.content, from, 1),
+        `${from} ${type} ${to}`,
+        0.93,
+        { source: relation.source, domain: relation.domain, configured: true, environment: relation.environment },
+        "configuration",
+        "system-manifest"
+      ));
     }
     return facts;
   }

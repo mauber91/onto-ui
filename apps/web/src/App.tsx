@@ -53,6 +53,15 @@ const domainPalette = ["#b97960", "#7d9580", "#ca9c5e", "#718297", "#a1849d", "#
 
 const typeIcon = (type: string) => {
   if (type === "Service") return <ServerCog size={15} />;
+  if (type === "FrontendApplication") return <Network size={15} />;
+  if (type === "FrontendRoute") return <ArrowUpRight size={15} />;
+  if (type === "Workflow") return <GitBranch size={15} />;
+  if (type === "FrontendApiCall") return <Code2 size={15} />;
+  if (type === "BffEndpoint") return <ServerCog size={15} />;
+  if (type === "ApplicationService") return <Settings2 size={15} />;
+  if (type === "DownstreamOperation") return <ArrowLeftRight size={15} />;
+  if (type === "Configuration") return <Settings2 size={15} />;
+  if (type === "AuthPolicy") return <Check size={15} />;
   if (type === "APIEndpoint") return <ArrowUpRight size={15} />;
   if (type === "Event") return <Activity size={15} />;
   if (type === "Database") return <Database size={15} />;
@@ -62,7 +71,7 @@ const typeIcon = (type: string) => {
   return <CircleDot size={15} />;
 };
 
-const typeLabel = (type: string) => ({ APIEndpoint: "API endpoint", DomainEntity: "Domain entity", OntologyType: "Ontology type" }[type] ?? type);
+const typeLabel = (type: string) => ({ APIEndpoint: "API endpoint", BffEndpoint: "BFF endpoint", FrontendApiCall: "frontend API call", FrontendApplication: "frontend application", FrontendRoute: "frontend route", ApplicationService: "application service", DownstreamOperation: "downstream operation", AuthPolicy: "authorization policy", DomainEntity: "Domain entity", OntologyType: "Ontology type" }[type] ?? type);
 
 function OntologyNode({ data, selected }: NodeProps<FlowNode>) {
   const isDomain = data.type === "Domain";
@@ -94,7 +103,7 @@ function makePositions(graph: GraphPayload): Record<string, { x: number; y: numb
     return positions;
   }
   const domains = graph.entities.filter((entity) => entity.type === "Domain");
-  const domainIndex = new Map(domains.map((domain, index) => [domain.name, index]));
+  const domainIndex = new Map<string, number>(domains.map((domain, index): [string, number] => [domain.name, index]));
   domains.forEach((domain, index) => { positions[domain.id] = { x: 40 + index * 360, y: 50 }; });
   const counts = new Map<string, number>();
   graph.entities.filter((entity) => entity.type !== "Domain").forEach((entity) => {
@@ -201,11 +210,19 @@ const GraphCanvas = memo(function GraphCanvas({
 
 function App() {
   const queryClient = useQueryClient();
-  const [projectId, setProjectId] = useState("commerce");
+  const [projectId, setProjectId] = useState("offer-sample-management");
   const [mode, setMode] = useState<GraphMode>("system");
   const [search, setSearch] = useState("");
   const [activeType, setActiveType] = useState<string | undefined>();
   const [activeDomain, setActiveDomain] = useState<string | undefined>();
+  const [activeWorkflow, setActiveWorkflow] = useState<string | undefined>();
+  const [activeRoute, setActiveRoute] = useState<string | undefined>();
+  const [activeEndpoint, setActiveEndpoint] = useState<string | undefined>();
+  const [activeDownstream, setActiveDownstream] = useState<string | undefined>();
+  const [activeRepository, setActiveRepository] = useState<string | undefined>();
+  const [activeEnvironment, setActiveEnvironment] = useState<string | undefined>();
+  const [activeOrigin, setActiveOrigin] = useState<string | undefined>();
+  const [minimumConfidence, setMinimumConfidence] = useState<number | undefined>();
   const [selectedId, setSelectedId] = useState<string>();
   const [selectedKind, setSelectedKind] = useState<"node" | "edge">("node");
   const [showLeft, setShowLeft] = useState(true);
@@ -217,8 +234,20 @@ function App() {
   const projectsQuery = useQuery({ queryKey: ["projects"], queryFn: getProjects });
   const project: ProjectSummary | undefined = projectsQuery.data?.projects.find((item) => item.id === projectId);
   const graphQuery = useQuery({
-    queryKey: ["graph", projectId, mode, activeType, activeDomain, deferredSearch],
-    queryFn: () => getGraph(projectId, mode, { type: activeType, domain: activeDomain, search: deferredSearch.length > 1 ? deferredSearch : undefined }),
+    queryKey: ["graph", projectId, mode, activeType, activeDomain, activeWorkflow, activeRoute, activeEndpoint, activeDownstream, activeRepository, activeEnvironment, activeOrigin, minimumConfidence, deferredSearch],
+    queryFn: () => getGraph(projectId, mode, {
+      type: activeType,
+      domain: activeDomain,
+      workflow: activeWorkflow,
+      route: activeRoute,
+      endpoint: activeEndpoint,
+      downstream: activeDownstream,
+      repository: activeRepository,
+      environment: activeEnvironment,
+      origin: activeOrigin,
+      confidence: minimumConfidence,
+      search: deferredSearch.length > 1 ? deferredSearch : undefined
+    }),
     enabled: Boolean(projectId),
     placeholderData: (previous) => previous
   });
@@ -249,7 +278,7 @@ function App() {
   useEffect(() => {
     setSelectedId(undefined);
     setStoredPositions({});
-  }, [mode, activeType, activeDomain]);
+  }, [mode, activeType, activeDomain, activeWorkflow, activeRoute, activeEndpoint, activeDownstream, activeRepository, activeEnvironment, activeOrigin, minimumConfidence]);
 
   const onNodeClick = useCallback((node: FlowNode) => {
     setSelectedKind("node");
@@ -268,7 +297,19 @@ function App() {
     setActiveType(type);
     setActiveDomain(undefined);
   };
-  const clearFilters = () => { setActiveType(undefined); setActiveDomain(undefined); setSearch(""); };
+  const clearFilters = () => {
+    setActiveType(undefined);
+    setActiveDomain(undefined);
+    setActiveWorkflow(undefined);
+    setActiveRoute(undefined);
+    setActiveEndpoint(undefined);
+    setActiveDownstream(undefined);
+    setActiveRepository(undefined);
+    setActiveEnvironment(undefined);
+    setActiveOrigin(undefined);
+    setMinimumConfidence(undefined);
+    setSearch("");
+  };
 
   return (
     <div className="app-shell">
@@ -291,16 +332,37 @@ function App() {
           graph={graph}
           activeType={activeType}
           activeDomain={activeDomain}
+          activeWorkflow={activeWorkflow}
           selectType={selectType}
           setActiveDomain={(domain) => { setActiveDomain(domain); setActiveType(undefined); }}
+          setActiveWorkflow={(workflow) => { setActiveWorkflow(workflow); setActiveType(undefined); setActiveDomain(undefined); }}
           clearFilters={clearFilters}
           mode={mode}
         />}
         <main className="canvas-region">
           <div className="canvas-toolbar">
             <div className="canvas-context"><span className="context-dot" />{mode === "system" ? "System graph" : "Ontology schema"}<span className="toolbar-separator" />{graph?.totalEntities ?? 0} nodes · {graph?.totalRelationships ?? 0} relations</div>
+            {mode === "system" && <GraphFiltersBar
+              graph={graph}
+              workflow={activeWorkflow}
+              route={activeRoute}
+              endpoint={activeEndpoint}
+              downstream={activeDownstream}
+              repository={activeRepository}
+              environment={activeEnvironment}
+              origin={activeOrigin}
+              confidence={minimumConfidence}
+              setWorkflow={setActiveWorkflow}
+              setRoute={setActiveRoute}
+              setEndpoint={setActiveEndpoint}
+              setDownstream={setActiveDownstream}
+              setRepository={setActiveRepository}
+              setEnvironment={setActiveEnvironment}
+              setOrigin={setActiveOrigin}
+              setConfidence={setMinimumConfidence}
+            />}
             <div className="canvas-actions">
-              {(activeType || activeDomain || search) && <button className="filter-chip" onClick={clearFilters}><Filter size={13} /> Filters on <X size={12} /></button>}
+              {(activeType || activeDomain || activeWorkflow || activeRoute || activeEndpoint || activeDownstream || activeRepository || activeEnvironment || activeOrigin || minimumConfidence || search) && <button className="filter-chip" onClick={clearFilters}><Filter size={13} /> Filters on <X size={12} /></button>}
               <button className="icon-button" title="Center graph" onClick={() => window.dispatchEvent(new Event("onto-fit-view"))}><LocateFixed size={16} /></button>
               <button className="icon-button" title="Canvas settings"><Settings2 size={16} /></button>
             </div>
@@ -324,7 +386,7 @@ function App() {
             </div>
           </div>
           <div className="status-bar">
-            <div className="status-left"><span className="status-live"><span /> Live local snapshot</span><span className="status-divider" />revision demo-revision-2026-08-22<span className="status-divider" />{lastRunMessage ?? "All assertions have provenance"}</div>
+            <div className="status-left"><span className="status-live"><span /> Live local snapshot</span><span className="status-divider" />{project?.id ?? "workspace"}<span className="status-divider" />{lastRunMessage ?? "All assertions have provenance"}</div>
             <button className="refresh-button" onClick={() => ingestMutation.mutate()} disabled={ingestMutation.isPending}><RefreshCw size={13} className={ingestMutation.isPending ? "spin" : ""} />{ingestMutation.isPending ? "Refreshing…" : "Re-run discovery"}</button>
           </div>
         </main>
@@ -340,6 +402,72 @@ function App() {
       </div>
     </div>
   );
+}
+
+function GraphFiltersBar(props: {
+  graph?: GraphPayload;
+  workflow?: string;
+  route?: string;
+  endpoint?: string;
+  downstream?: string;
+  repository?: string;
+  environment?: string;
+  origin?: string;
+  confidence?: number;
+  setWorkflow: (value?: string) => void;
+  setRoute: (value?: string) => void;
+  setEndpoint: (value?: string) => void;
+  setDownstream: (value?: string) => void;
+  setRepository: (value?: string) => void;
+  setEnvironment: (value?: string) => void;
+  setOrigin: (value?: string) => void;
+  setConfidence: (value?: number) => void;
+}) {
+  const entities = props.graph?.entities ?? [];
+  const workflows: Array<[string, string]> = [...new Map<string, string>(entities.filter((entity) => entity.type === "Workflow").map((entity): [string, string] => [String(entity.properties.workflowKey ?? entity.name), entity.name])).entries()];
+  const routes = [...new Set(entities.filter((entity) => entity.type === "FrontendRoute").map((entity) => entity.name))] as string[];
+  const endpoints = [...new Set(entities.filter((entity) => entity.type === "BffEndpoint").map((entity) => entity.name))] as string[];
+  const downstream = [...new Set(entities.filter((entity) => entity.type === "Service").map((entity) => entity.name))] as string[];
+  const repositories = [...new Set(entities.flatMap((entity) => [entity.source?.repository, typeof entity.properties.repository === "string" ? entity.properties.repository : undefined]).filter(Boolean))] as string[];
+  const environments = [...new Set(entities.map((entity) => entity.source?.environment ?? (typeof entity.properties.environment === "string" ? entity.properties.environment : undefined)).filter(Boolean))] as string[];
+  return <div className="graph-filters" aria-label="Evidence graph filters">
+    <select aria-label="Workflow filter" value={props.workflow ?? ""} onChange={(event) => props.setWorkflow(event.target.value || undefined)}>
+      <option value="">All workflows</option>
+      {workflows.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+    </select>
+    <select aria-label="Frontend route filter" value={props.route ?? ""} onChange={(event) => props.setRoute(event.target.value || undefined)}>
+      <option value="">All routes</option>
+      {routes.map((route) => <option key={route} value={route}>{route}</option>)}
+    </select>
+    <select aria-label="BFF endpoint filter" value={props.endpoint ?? ""} onChange={(event) => props.setEndpoint(event.target.value || undefined)}>
+      <option value="">All BFF endpoints</option>
+      {endpoints.map((endpoint) => <option key={endpoint} value={endpoint}>{endpoint}</option>)}
+    </select>
+    <select aria-label="Downstream service filter" value={props.downstream ?? ""} onChange={(event) => props.setDownstream(event.target.value || undefined)}>
+      <option value="">All downstream services</option>
+      {downstream.map((service) => <option key={service} value={service}>{service}</option>)}
+    </select>
+    <select aria-label="Repository filter" value={props.repository ?? ""} onChange={(event) => props.setRepository(event.target.value || undefined)}>
+      <option value="">All repositories</option>
+      {repositories.map((repository) => <option key={repository} value={repository}>{repository}</option>)}
+    </select>
+    <select aria-label="Environment filter" value={props.environment ?? ""} onChange={(event) => props.setEnvironment(event.target.value || undefined)}>
+      <option value="">All environments</option>
+      {environments.map((environment) => <option key={environment} value={environment}>{environment}</option>)}
+    </select>
+    <select aria-label="Evidence origin filter" value={props.origin ?? ""} onChange={(event) => props.setOrigin(event.target.value || undefined)}>
+      <option value="">All evidence</option>
+      <option value="deterministic">Deterministic</option>
+      <option value="configuration">Configuration</option>
+      <option value="documentation">Documentation</option>
+    </select>
+    <select aria-label="Minimum confidence filter" value={props.confidence ?? ""} onChange={(event) => props.setConfidence(event.target.value ? Number(event.target.value) : undefined)}>
+      <option value="">Any confidence</option>
+      <option value="0.8">≥ 80%</option>
+      <option value="0.9">≥ 90%</option>
+      <option value="0.95">≥ 95%</option>
+    </select>
+  </div>;
 }
 
 function TopBar(props: {
@@ -360,7 +488,7 @@ function TopBar(props: {
     <header className="topbar">
       <div className="brand"><div className="brand-mark">o</div><span>onto</span><span className="brand-slash">/</span><span className="brand-section">explore</span></div>
       <div className="topbar-divider" />
-      <button className="project-select"><span className="project-avatar">CS</span><span className="project-copy"><strong>{props.project?.name ?? "Commerce & Sourcing"}</strong><small>workspace snapshot</small></span><ChevronDown size={14} /></button>
+      <label className="project-select"><span className="project-avatar">{props.projectId === "offer-sample-management" ? "OS" : "CS"}</span><span className="project-copy"><strong>{props.project?.name ?? "Commerce & Sourcing"}</strong><small>workspace snapshot</small></span><select aria-label="Project snapshot" value={props.projectId} onChange={(event) => props.setProjectId(event.target.value)}>{props.projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><ChevronDown size={14} /></label>
       <div className="command-wrap"><Search size={16} /><input aria-label="Search or ask your system" value={props.search} onChange={(event) => props.setSearch(event.target.value)} placeholder="Search entities, services, or ask your architecture…" /><span className="shortcut">⌘ K</span></div>
       <div className="topbar-spacer" />
       <div className="mode-toggle" role="tablist" aria-label="Graph mode">
@@ -379,13 +507,16 @@ function Explorer(props: {
   graph?: GraphPayload;
   activeType?: string;
   activeDomain?: string;
+  activeWorkflow?: string;
   selectType: (type?: string) => void;
   setActiveDomain: (domain: string) => void;
+  setActiveWorkflow: (workflow?: string) => void;
   clearFilters: () => void;
   mode: GraphMode;
 }) {
   const entities = props.graph?.entities ?? [];
-  const domains = [...new Set(entities.filter((entity) => entity.type === "Domain").map((entity) => entity.name))];
+  const domains: string[] = [...new Set<string>(entities.filter((entity) => entity.type === "Domain").map((entity): string => entity.name))];
+  const workflows: Array<[string, string]> = [...new Map<string, string>(entities.filter((entity) => entity.type === "Workflow").map((entity): [string, string] => [String(entity.properties.workflowKey ?? entity.name), entity.name])).entries()];
   const counts = (type: string) => entities.filter((entity) => entity.type === type).length;
   const navItem = (label: string, icon: React.ReactNode, type?: string, count?: number) => (
     <button className={`explorer-item ${props.activeType === type ? "active" : ""}`} onClick={() => props.selectType(type)}>{icon}<span>{label}</span>{count !== undefined && <em>{count}</em>}</button>
@@ -399,9 +530,15 @@ function Explorer(props: {
         {navItem("Domains", <Layers3 size={15} />, "Domain", counts("Domain"))}
         {navItem("Services", <ServerCog size={15} />, "Service", counts("Service"))}
         {navItem("APIs", <ArrowUpRight size={15} />, "APIEndpoint", counts("APIEndpoint"))}
+        {navItem("Frontend calls", <Code2 size={15} />, "FrontendApiCall", counts("FrontendApiCall"))}
+        {navItem("BFF endpoints", <ServerCog size={15} />, "BffEndpoint", counts("BffEndpoint"))}
         {navItem("Events", <Activity size={15} />, "Event", counts("Event"))}
         {navItem("Data stores", <Database size={15} />, "Database", counts("Database"))}
         {navItem("Business concepts", <Boxes size={15} />, "DomainEntity", counts("DomainEntity"))}
+        <div className="explorer-label domains-label">Workflows</div>
+        <div className="domain-list">
+          {workflows.map(([value, label]) => <button key={value} className={`domain-item ${props.activeWorkflow === value ? "active" : ""}`} onClick={() => props.setActiveWorkflow(props.activeWorkflow === value ? undefined : value)}><span className="domain-swatch workflow-swatch" />{label}<em>{entities.filter((entity) => String(entity.properties.workflow ?? entity.properties.workflowKey ?? "") === value).length}</em></button>)}
+        </div>
         <div className="explorer-label domains-label">Domains</div>
         <div className="domain-list">
           {domains.map((domain, index) => <button key={domain} className={`domain-item ${props.activeDomain === domain ? "active" : ""}`} onClick={() => props.setActiveDomain(domain)}><span className="domain-swatch" style={{ background: domainPalette[index % domainPalette.length] }} />{domain}<em>{entities.filter((entity) => entity.domain === domain && entity.type !== "Domain").length}</em></button>)}
@@ -451,7 +588,7 @@ function ConfidenceMeter({ confidence, origin }: { confidence: number; origin: s
 }
 
 function EvidenceSection({ evidence }: { evidence?: EvidenceRef[] }) {
-  return <div className="inspector-section evidence-section"><div className="section-heading">Evidence <em>{evidence?.length ?? 0}</em></div>{evidence?.length ? <div className="evidence-list">{evidence.map((item) => <div className="evidence-item" key={item.id}><div className="evidence-icon"><FileCode2 size={13} /></div><div className="evidence-copy"><strong>{item.label}</strong><span>{item.location?.file ?? item.uri ?? "Source reference"}{item.location?.line ? `:${item.location.line}` : ""}</span><small>{item.kind}</small></div><ArrowUpRight size={13} className="evidence-arrow" /></div>)}</div> : <div className="empty-evidence"><FileCode2 size={15} /><span>No source evidence attached.</span></div>}</div>;
+  return <div className="inspector-section evidence-section"><div className="section-heading">Evidence <em>{evidence?.length ?? 0}</em></div>{evidence?.length ? <div className="evidence-list">{evidence.map((item) => <div className="evidence-item" key={item.id}><div className="evidence-icon"><FileCode2 size={13} /></div><div className="evidence-copy"><strong>{item.label}</strong><span>{item.location?.file ?? item.uri ?? "Source reference"}{item.location?.line ? `:${item.location.line}` : ""}</span>{(item.repository || item.revision || item.environment) && <small className="evidence-source">{item.repository ?? "source"}{item.revision ? ` · ${item.revision}` : ""}{item.environment ? ` · ${item.environment}` : ""}</small>}<small>{item.kind}</small></div><ArrowUpRight size={13} className="evidence-arrow" /></div>)}</div> : <div className="empty-evidence"><FileCode2 size={15} /><span>No source evidence attached.</span></div>}</div>;
 }
 
 export { App };
